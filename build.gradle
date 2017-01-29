@@ -1,0 +1,52 @@
+apply plugin: 'idea'
+apply plugin: 'java'
+
+version = '0.0.1'
+
+repositories {
+    mavenCentral()
+    flatDir {
+       dirs 'libs'
+    }
+    maven {
+        url "https://oss.sonatype.org/content/repositories/snapshots"
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src/main']
+        }
+    }
+}
+
+configurations {
+    provided
+    compile.extendsFrom provided
+}
+
+task bukkitPlugin(type: Jar) {
+    baseName = 'elemental'
+    manifest {
+        attributes 'Implementation-Title': 'elemental',
+                   'Implementation-Version': version
+    }
+    from (sourceSets.main.output) {
+        include "net/rocketeer/elemental/**"
+    }
+    from ('src/main/resources') {
+        include "plugin.yml"
+    }
+    from {
+        (configurations.compile - configurations.provided).collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
+dependencies {
+    compile name: 'elemental-backend'
+    provided name: 'spigot-api-1.9.4'
+    provided group: 'com.google.code.gson', name: 'gson', version: '2.7'
+}
+
+buildDir = 'bin'
