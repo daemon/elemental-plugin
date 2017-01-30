@@ -67,10 +67,10 @@ public class ElementalPlugin extends JavaPlugin {
               if (newMaterial != material)
                 block.setType(newMaterial.material);
             }
-            heat -= 85F;
-            // http://www.tannerhelland.com/4435/convert-temperature-rgb-algorithm-code/
-            if (heat < 4)
+            if (heat < 85F)
               continue;
+            heat = (float) Math.sqrt(heat - 85F);
+            // http://www.tannerhelland.com/4435/convert-temperature-rgb-algorithm-code/
             double red, green, blue;
             if (heat <= 66) {
               red = 255;
@@ -95,7 +95,7 @@ public class ElementalPlugin extends JavaPlugin {
             }
             ////////////////////////////
             ParticleEffect.REDSTONE.display((int) red, (int) green, (int) blue, 0.0035F, 0,
-                new Location(world[0], i + 2 * (Math.random() - 0.3), j + 2 * (Math.random() - 0.3), k + 2 * (Math.random() - 0.3)), 200);
+                new Location(world[0], i + 2 * (Math.random() - 0.3), j + 2 * (Math.random() - 0.3), k + 2 * (Math.random() - 0.3)), 64);
           }
     }, 0, 2);
     Bukkit.getPluginManager().registerEvents(new Listener() {
