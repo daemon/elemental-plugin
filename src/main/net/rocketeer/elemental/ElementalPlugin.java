@@ -5,6 +5,7 @@ import net.rocketeer.elemental.geometry.Scene;
 import net.rocketeer.elemental.material.ElementalMaterial;
 import net.rocketeer.elemental.material.ElementalMaterialStore;
 import net.rocketeer.elemental.material.PhasedMaterial;
+import org.apache.commons.lang.ArrayUtils;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.command.Command;
@@ -16,14 +17,22 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.block.BlockPhysicsEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class ElementalPlugin extends JavaPlugin {
+  private boolean[] wallBlocks;
+
   @Override
   public void onEnable() {
+    this.wallBlocks = new boolean[100 * 100 * 100];
     int size = 100;
     Scene scene = new Scene(size);
     Lock lock = new ReentrantLock();
@@ -35,6 +44,11 @@ public class ElementalPlugin extends JavaPlugin {
         lock.lock();
         lib.heat3d(scene.heatData().heatPoints(), scene.buffer(), scene.heatData().heatCoeffs(), 0.1F, size);
         lock.unlock();
+        synchronized (scene.fluidField()) {
+          Scene.FluidField field = scene.fluidField();
+          lib.sph(field.positionsX, field.positionsY, field.positionsZ, field.velocitiesX, field.velocitiesY, field.velocitiesZ,
+              wallBlocks, 0.02F, field.positionsX.length, 100);
+        }
         try {
           Thread.sleep(25);
         } catch (InterruptedException e) {
@@ -43,6 +57,7 @@ public class ElementalPlugin extends JavaPlugin {
       }
     });
     final World[] world = {null};
+    Set<Block> pastWaterBlocks = new HashSet<>();
     Bukkit.getScheduler().scheduleSyncRepeatingTask(this, () -> {
       if (world[0] == null) {
         for (Player player : Bukkit.getOnlinePlayers())
@@ -50,11 +65,35 @@ public class ElementalPlugin extends JavaPlugin {
         if (world[0] == null)
           return;
       }
+      synchronized (scene.fluidField()) {
+        Scene.FluidField field = scene.fluidField();
+        System.out.println("P" + ArrayUtils.toString(field.positionsY));
+        System.out.println("V" + ArrayUtils.toString(field.velocitiesY));
+        for (int i = 0; i < field.positionsX.length; ++i) {
+          int x = (int) field.positionsX[i];
+          int y = (int) field.positionsY[i];
+          int z = (int) field.positionsZ[i];
+          if (pastWaterBlocks.contains(world[0].getBlockAt(x, y, z)))
+            pastWaterBlocks.remove(world[0].getBlockAt(x, y, z));
+        }
+        for (Block b : pastWaterBlocks)
+          b.setType(Material.AIR);
+        pastWaterBlocks.clear();
+        for (int i = 0; i < field.positionsX.length; ++i) {
+          int x = (int) field.positionsX[i];
+          int y = (int) field.positionsY[i];
+          int z = (int) field.positionsZ[i];
+          pastWaterBlocks.add(world[0].getBlockAt(x, y, z));
+          world[0].getBlockAt(x, y, z).setType(Material.WATER);
+        }
+      }
       for (int i = 0; i < size; ++i)
         for (int j = 0; j < size; ++j)
           for (int k = 0; k < size; ++k) {
             Block block = world[0].getBlockAt(i, j, k);
             Material type = block.getType();
+            if (type != Material.AIR && type != Material.WATER && type != Material.STATIONARY_WATER)
+              wallBlocks[i * size * size + j * size + k] = true;
             ElementalMaterial material = ElementalMaterialStore.instance().find(type);
             if (material == null || material.material == Material.AIR)
               continue;
@@ -108,10 +147,21 @@ public class ElementalPlugin extends JavaPlugin {
         int z = event.getToBlock().getLocation().getBlockZ();
         if (x >= size || x < 0 || y >= size || y < 0 || z >= size || z < 0)
           return;
-        float heat = scene.heatData().heatPoints()[size * size * x + size * y + z];
-        if (heat > 100) {
-          event.setCancelled(true);
+        event.setCancelled(true);
+      }
+
+      @EventHandler
+      public void onWaterBucket(PlayerBucketEmptyEvent event) {
+        Block b = event.getBlockClicked().getRelative(event.getBlockFace());
+        synchronized (scene.fluidField()) {
+          scene.fluidField().positionsX = ArrayUtils.add(scene.fluidField().positionsX, b.getX());
+          scene.fluidField().positionsY = ArrayUtils.add(scene.fluidField().positionsY, b.getY());
+          scene.fluidField().positionsZ = ArrayUtils.add(scene.fluidField().positionsZ, b.getZ());
+          scene.fluidField().velocitiesX = ArrayUtils.add(scene.fluidField().velocitiesX, 0);
+          scene.fluidField().velocitiesY = ArrayUtils.add(scene.fluidField().velocitiesY, 0);
+          scene.fluidField().velocitiesZ = ArrayUtils.add(scene.fluidField().velocitiesZ, 0);
         }
+        event.setCancelled(true);
       }
 
       @EventHandler
@@ -121,6 +171,7 @@ public class ElementalPlugin extends JavaPlugin {
         int z = event.getBlock().getLocation().getBlockZ();
         if (x >= size || x < 0 || y >= size || y < 0 || z >= size || z < 0)
           return;
+        wallBlocks[x * 100 * 100 + y * 100 + z] = true;
         ElementalMaterial material = ElementalMaterialStore.instance().find(event.getBlock().getType());
         if (material == null)
           return;
@@ -142,7 +193,7 @@ public class ElementalPlugin extends JavaPlugin {
         if (x >= size || x < 0 || y >= size || y < 0 || z >= size || z < 0)
           return true;
         lock.lock();
-        scene.heatData().setHeat(heat, x, y - 1, z);
+        scene.heatData().setHeat(x, y - 1, z, heat);
         lock.unlock();
         return true;
       }

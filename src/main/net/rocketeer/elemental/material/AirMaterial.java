@@ -11,7 +11,7 @@ public class AirMaterial extends PhasedMaterial {
   public void onSceneUpdate(Scene scene, int x, int y, int z) {
     int w = scene.width();
     float temp = scene.heatData().heatPoints()[w * w * x + w * y + z];
-    scene.heatData().setHeat(Math.min(temp * 0.993F, this.temperature), x, y, z);
+    scene.heatData().setHeat(x, y, z, Math.min(temp * 0.993F, this.temperature));
   }
 
   @Override
